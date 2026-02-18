@@ -236,8 +236,26 @@
     padding: 2px;
   }
 
+  .btn-row {
+    display: flex; gap: 8px;
+  }
+  .cancel-btn {
+    padding: 9px 16px;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .cancel-btn:hover { color: var(--text); border-color: var(--muted); }
+
   .merge-btn {
-    width: 100%;
+    flex: 1;
     padding: 9px;
     background: var(--accent);
     color: #fff;
@@ -355,7 +373,10 @@
     </div>
   </div>
   <div class="status-bar" id="statusBar"></div>
-  <button class="merge-btn" id="mergeBtn" disabled>Select groups to merge</button>
+  <div class="btn-row">
+    <button class="cancel-btn" id="cancelBtn">Cancel</button>
+    <button class="merge-btn" id="mergeBtn" disabled>Select groups to merge</button>
+  </div>
 </div>
 
 <script>
@@ -372,6 +393,7 @@
   const createStyleCheck = document.getElementById('createStyleCheck');
   const styleNameWrap = document.getElementById('styleNameWrap');
   const styleNameInput = document.getElementById('styleNameInput');
+  const cancelBtn = document.getElementById('cancelBtn');
 
   let groups = [];
   let selectedGroups = new Set();
@@ -409,6 +431,11 @@
     } else {
       styleNameWrap.classList.add('hidden');
     }
+  });
+
+  // ── Cancel ──
+  cancelBtn.addEventListener('click', () => {
+    parent.postMessage({ pluginMessage: { type: 'close' } }, '*');
   });
 
   // ── Scan ──
