@@ -197,7 +197,15 @@ figma.ui.onmessage = async (msg) => {
         .filter(Boolean);
       const changed = await applyMerge(selectedGroups, msg.targetHex);
 
-      figma.ui.postMessage({ type: "merge-done", changed });
+      let styleCreated = false;
+      if (msg.styleName) {
+        const style = figma.createPaintStyle();
+        style.name = msg.styleName;
+        style.paints = [{ type: "SOLID", color: hexToRgb(msg.targetHex) }];
+        styleCreated = true;
+      }
+
+      figma.ui.postMessage({ type: "merge-done", changed, styleCreated, styleName: msg.styleName });
     } catch (e) {
       figma.ui.postMessage({ type: "error", message: `Merge failed: ${e instanceof Error ? e.message : String(e)}` });
     }

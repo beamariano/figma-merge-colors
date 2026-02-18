@@ -253,6 +253,24 @@
   .merge-btn:hover { background: var(--accent-hover); }
   .merge-btn:disabled { opacity: 0.4; cursor: default; }
 
+  .style-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .style-checkbox-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--muted);
+    cursor: pointer; white-space: nowrap;
+    user-select: none;
+  }
+  .style-checkbox-label input[type=checkbox] {
+    accent-color: var(--accent);
+    width: 13px; height: 13px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  #styleNameWrap { flex: 1; }
+  #styleNameWrap.hidden { display: none; }
+
   .status-bar {
     font-size: 11px; color: var(--success); text-align: center;
     min-height: 16px;
@@ -327,6 +345,15 @@
     </div>
     <input type="color" id="colorPicker" value="#a0a0ff" title="Pick color" />
   </div>
+  <div class="style-row">
+    <label class="style-checkbox-label">
+      <input type="checkbox" id="createStyleCheck" />
+      Create style
+    </label>
+    <div class="hex-input-wrap hidden" id="styleNameWrap">
+      <input type="text" id="styleNameInput" placeholder="e.g. Brand/Primary" />
+    </div>
+  </div>
   <div class="status-bar" id="statusBar"></div>
   <button class="merge-btn" id="mergeBtn" disabled>Select groups to merge</button>
 </div>
@@ -342,6 +369,9 @@
   const colorPreview = document.getElementById('colorPreview');
   const mergeBtn = document.getElementById('mergeBtn');
   const statusBar = document.getElementById('statusBar');
+  const createStyleCheck = document.getElementById('createStyleCheck');
+  const styleNameWrap = document.getElementById('styleNameWrap');
+  const styleNameInput = document.getElementById('styleNameInput');
 
   let groups = [];
   let selectedGroups = new Set();
@@ -369,6 +399,17 @@
 
   colorPicker.addEventListener('input', () => setColor(colorPicker.value));
   setColor('#A0A0FF');
+
+  // ── Create style toggle ──
+  createStyleCheck.addEventListener('change', () => {
+    if (createStyleCheck.checked) {
+      styleNameWrap.classList.remove('hidden');
+      if (!styleNameInput.value) styleNameInput.value = targetColor.replace('#', '');
+      styleNameInput.focus();
+    } else {
+      styleNameWrap.classList.add('hidden');
+    }
+  });
 
   // ── Scan ──
   scanBtn.addEventListener('click', () => {
@@ -485,12 +526,14 @@
     mergeBtn.innerHTML = '<span class="spinner" style="vertical-align:middle"></span> Merging…';
     statusBar.textContent = '';
 
+    const styleName = createStyleCheck.checked ? styleNameInput.value.trim() : null;
     parent.postMessage({
       pluginMessage: {
         type: 'merge',
         groupIndices: [...selectedGroups],
         targetHex: targetColor.replace('#', ''),
-        threshold: +thresholdSlider.value
+        threshold: +thresholdSlider.value,
+        styleName
       }
     }, '*');
   });
@@ -512,7 +555,8 @@
 
     if (msg.type === 'merge-done') {
       statusBar.classList.remove('error');
-      statusBar.textContent = `✓ Updated ${msg.changed} layer${msg.changed !== 1 ? 's' : ''}`;
+      const styleNote = msg.styleCreated ? ` · style "${msg.styleName}" created` : '';
+      statusBar.textContent = `✓ Updated ${msg.changed} layer${msg.changed !== 1 ? 's' : ''}${styleNote}`;
       selectedGroups.clear();
       // Re-scan automatically
       setTimeout(() => {
