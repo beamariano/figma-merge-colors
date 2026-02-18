@@ -1,163 +1,209 @@
-// This file holds the main code for plugins. Code in this file has access to
-// the *figma document* via the figma global object.
-// You can access browser APIs in the <script> tag inside "ui.html" which has a
-// full browser environment (See https://www.figma.com/plugin-docs/how-plugins-run).
+// Color Merger - Figma Plugin
+// Scans all nodes for fill/stroke colors, groups similar ones, and replaces them
 
-// Runs this code if the plugin is run in Figma
-if (figma.editorType === "figma") {
-  // This plugin will open a window to prompt the user to enter a number, and
-  // it will then create that many rectangles on the screen.
+figma.showUI(__html__, { width: 480, height: 600, title: "Color Merger" });
 
-  // This shows the HTML page in "ui.html".
-  figma.showUI(__html__);
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-  // Calls to "parent.postMessage" from within the HTML page will trigger this
-  // callback. The callback will be passed the "pluginMessage" property of the
-  // posted message.
-  figma.ui.onmessage = (msg: { type: string; count: number }) => {
-    // One way of distinguishing between different types of messages sent from
-    // your HTML page is to use an object with a "type" property like this.
-    if (msg.type === "create-shapes") {
-      // This plugin creates rectangles on the screen.
-      const numberOfRectangles = msg.count;
+function toHex(r, g, b) {
+  return [r, g, b]
+    .map((v) =>
+      Math.round(v * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")
+    .toUpperCase();
+}
 
-      const nodes: SceneNode[] = [];
-      for (let i = 0; i < numberOfRectangles; i++) {
-        const rect = figma.createRectangle();
-        rect.x = i * 150;
-        rect.fills = [{ type: "SOLID", color: { r: 1, g: 0.5, b: 0 } }];
-        figma.currentPage.appendChild(rect);
-        nodes.push(rect);
-      }
-      figma.currentPage.selection = nodes;
-      figma.viewport.scrollAndZoomIntoView(nodes);
-    }
-
-    // Make sure to close the plugin when you're done. Otherwise the plugin will
-    // keep running, which shows the cancel button at the bottom of the screen.
-    figma.closePlugin();
+function hexToRgb(hex) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return {
+    r: ((n >> 16) & 255) / 255,
+    g: ((n >> 8) & 255) / 255,
+    b: (n & 255) / 255,
   };
 }
 
-// Runs this code if the plugin is run in FigJam
-if (figma.editorType === "figjam") {
-  // This plugin will open a window to prompt the user to enter a number, and
-  // it will then create that many shapes and connectors on the screen.
-
-  // This shows the HTML page in "ui.html".
-  figma.showUI(__html__);
-
-  // Calls to "parent.postMessage" from within the HTML page will trigger this
-  // callback. The callback will be passed the "pluginMessage" property of the
-  // posted message.
-  figma.ui.onmessage = (msg: { type: string; count: number }) => {
-    // One way of distinguishing between different types of messages sent from
-    // your HTML page is to use an object with a "type" property like this.
-    if (msg.type === "create-shapes") {
-      // This plugin creates shapes and connectors on the screen.
-      const numberOfShapes = msg.count;
-
-      const nodes: SceneNode[] = [];
-      for (let i = 0; i < numberOfShapes; i++) {
-        const shape = figma.createShapeWithText();
-        // You can set shapeType to one of: 'SQUARE' | 'ELLIPSE' | 'ROUNDED_RECTANGLE' | 'DIAMOND' | 'TRIANGLE_UP' | 'TRIANGLE_DOWN' | 'PARALLELOGRAM_RIGHT' | 'PARALLELOGRAM_LEFT'
-        shape.shapeType = "ROUNDED_RECTANGLE";
-        shape.x = i * (shape.width + 200);
-        shape.fills = [{ type: "SOLID", color: { r: 1, g: 0.5, b: 0 } }];
-        figma.currentPage.appendChild(shape);
-        nodes.push(shape);
-      }
-
-      for (let i = 0; i < numberOfShapes - 1; i++) {
-        const connector = figma.createConnector();
-        connector.strokeWeight = 8;
-
-        connector.connectorStart = {
-          endpointNodeId: nodes[i].id,
-          magnet: "AUTO",
-        };
-
-        connector.connectorEnd = {
-          endpointNodeId: nodes[i + 1].id,
-          magnet: "AUTO",
-        };
-      }
-
-      figma.currentPage.selection = nodes;
-      figma.viewport.scrollAndZoomIntoView(nodes);
-    }
-
-    // Make sure to close the plugin when you're done. Otherwise the plugin will
-    // keep running, which shows the cancel button at the bottom of the screen.
-    figma.closePlugin();
-  };
+function colorDistance(a, b) {
+  // Simple Euclidean distance in RGB space (0–255 scale each)
+  const dr = (a.r - b.r) * 255;
+  const dg = (a.g - b.g) * 255;
+  const db = (a.b - b.b) * 255;
+  return Math.sqrt(dr * dr + dg * dg + db * db);
 }
 
-// Runs this code if the plugin is run in Slides
-if (figma.editorType === "slides") {
-  // This plugin will open a window to prompt the user to enter a number, and
-  // it will then create that many slides on the screen.
+// ─── Scan ─────────────────────────────────────────────────────────────────────
 
-  // This shows the HTML page in "ui.html".
-  figma.showUI(__html__);
-
-  // Calls to "parent.postMessage" from within the HTML page will trigger this
-  // callback. The callback will be passed the "pluginMessage" property of the
-  // posted message.
-  figma.ui.onmessage = (msg: { type: string; count: number }) => {
-    // One way of distinguishing between different types of messages sent from
-    // your HTML page is to use an object with a "type" property like this.
-    if (msg.type === "create-shapes") {
-      // This plugin creates slides and puts the user in grid view.
-      const numberOfSlides = msg.count;
-
-      const nodes: SlideNode[] = [];
-      for (let i = 0; i < numberOfSlides; i++) {
-        const slide = figma.createSlide();
-        nodes.push(slide);
-      }
-
-      figma.viewport.slidesView = "grid";
-      figma.currentPage.selection = nodes;
-    }
-
-    // Make sure to close the plugin when you're done. Otherwise the plugin will
-    // keep running, which shows the cancel button at the bottom of the screen.
-    figma.closePlugin();
-  };
+function getAllNodes() {
+  return figma.currentPage.findAll();
 }
 
-// Runs this code if the plugin is run in Buzz
-if (figma.editorType === "buzz") {
-  // This plugin will open a window to prompt the user to enter a number, and
-  // it will then create that many frames on the screen.
-
-  // This shows the HTML page in "ui.html".
-  figma.showUI(__html__);
-
-  // Calls to "parent.postMessage" from within the HTML page will trigger this
-  // callback. The callback will be passed the "pluginMessage" property of the
-  // posted message.
-  figma.ui.onmessage = (msg: { type: string; count: number }) => {
-    // One way of distinguishing between different types of messages sent from
-    // your HTML page is to use an object with a "type" property like this.
-    if (msg.type === "create-shapes") {
-      // This plugin creates frames and puts the user in grid view.
-      const numberOfFrames = msg.count;
-
-      const nodes: FrameNode[] = [];
-      for (let i = 0; i < numberOfFrames; i++) {
-        const frame = figma.buzz.createFrame();
-        nodes.push(frame);
-      }
-
-      figma.viewport.canvasView = "grid";
-      figma.currentPage.selection = nodes;
-      figma.viewport.scrollAndZoomIntoView(nodes);
-    }
-
-    // Make sure to close the plugin when you're done. Otherwise the plugin will
-    // keep running, which shows the cancel button at the bottom of the screen.
-    figma.closePlugin();
-  };
+function extractPaints(paints) {
+  if (!paints || paints === figma.mixed) return [];
+  return paints
+    .filter((p) => p.type === "SOLID" && p.visible !== false)
+    .map((p) => ({
+      r: p.color.r,
+      g: p.color.g,
+      b: p.color.b,
+      a: p.opacity ?? 1,
+    }));
 }
+
+function scanColors() {
+  const nodes = getAllNodes();
+  // Map: hex -> { color, nodes: [{node, source: 'fill'|'stroke', index}] }
+  const colorMap = {};
+
+  for (const node of nodes) {
+    // fills
+    if ("fills" in node) {
+      const paints = extractPaints(node.fills);
+      paints.forEach((c, i) => {
+        const hex = toHex(c.r, c.g, c.b);
+        if (!colorMap[hex]) colorMap[hex] = { color: c, hex, nodes: [] };
+        colorMap[hex].nodes.push({ nodeId: node.id, source: "fill", index: i });
+      });
+    }
+    // strokes
+    if ("strokes" in node) {
+      const paints = extractPaints(node.strokes);
+      paints.forEach((c, i) => {
+        const hex = toHex(c.r, c.g, c.b);
+        if (!colorMap[hex]) colorMap[hex] = { color: c, hex, nodes: [] };
+        colorMap[hex].nodes.push({
+          nodeId: node.id,
+          source: "stroke",
+          index: i,
+        });
+      });
+    }
+  }
+
+  return colorMap;
+}
+
+function groupSimilarColors(colorMap, threshold) {
+  const entries = Object.values(colorMap);
+  const groups = []; // [{representative, hexes, totalCount}]
+  const assigned = new Set();
+
+  for (let i = 0; i < entries.length; i++) {
+    if (assigned.has(entries[i].hex)) continue;
+    const group = { representative: entries[i], members: [entries[i]] };
+    assigned.add(entries[i].hex);
+
+    for (let j = i + 1; j < entries.length; j++) {
+      if (assigned.has(entries[j].hex)) continue;
+      if (colorDistance(entries[i].color, entries[j].color) <= threshold) {
+        group.members.push(entries[j]);
+        assigned.add(entries[j].hex);
+      }
+    }
+    groups.push(group);
+  }
+
+  // Sort by total node usage desc
+  groups.sort((a, b) => {
+    const countA = a.members.reduce((s, m) => s + m.nodes.length, 0);
+    const countB = b.members.reduce((s, m) => s + m.nodes.length, 0);
+    return countB - countA;
+  });
+
+  return groups;
+}
+
+// ─── Apply merge ──────────────────────────────────────────────────────────────
+
+async function applyMerge(groups, targetHex) {
+  const targetColor = hexToRgb(targetHex);
+  let changed = 0;
+
+  for (const group of groups) {
+    // Collect all node refs across all members
+    for (const member of group.members) {
+      for (const ref of member.nodes) {
+        const node = await figma.getNodeByIdAsync(ref.nodeId);
+        if (!node) continue;
+
+        try {
+          if (
+            ref.source === "fill" &&
+            "fills" in node &&
+            node.fills !== figma.mixed
+          ) {
+            const fills = JSON.parse(JSON.stringify(node.fills));
+            if (fills[ref.index] && fills[ref.index].type === "SOLID") {
+              fills[ref.index].color = targetColor;
+              node.fills = fills;
+              changed++;
+            }
+          } else if (
+            ref.source === "stroke" &&
+            "strokes" in node &&
+            node.strokes !== figma.mixed
+          ) {
+            const strokes = JSON.parse(JSON.stringify(node.strokes));
+            if (strokes[ref.index] && strokes[ref.index].type === "SOLID") {
+              strokes[ref.index].color = targetColor;
+              node.strokes = strokes;
+              changed++;
+            }
+          }
+        } catch (e) {
+          // skip locked/component nodes
+        }
+      }
+    }
+  }
+
+  return changed;
+}
+
+// ─── Message handling ─────────────────────────────────────────────────────────
+
+figma.ui.onmessage = async (msg) => {
+  if (msg.type === "scan") {
+    try {
+      const colorMap = scanColors();
+      const threshold = msg.threshold ?? 20;
+      const groups = groupSimilarColors(colorMap, threshold);
+
+      const payload = groups.map((g) => ({
+        representative: g.representative.hex,
+        members: g.members.map((m) => ({
+          hex: m.hex,
+          count: m.nodes.length,
+        })),
+        totalCount: g.members.reduce((s, m) => s + m.nodes.length, 0),
+      }));
+
+      figma.ui.postMessage({ type: "scan-result", groups: payload, threshold });
+    } catch (e) {
+      figma.ui.postMessage({ type: "error", message: `Scan failed: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+
+  if (msg.type === "merge") {
+    try {
+      // msg.groups: array of group indices to merge, msg.targetHex: target color
+      const colorMap = scanColors();
+      const threshold = msg.threshold ?? 20;
+      const allGroups = groupSimilarColors(colorMap, threshold);
+
+      const selectedGroups = msg.groupIndices
+        .map((i) => allGroups[i])
+        .filter(Boolean);
+      const changed = await applyMerge(selectedGroups, msg.targetHex);
+
+      figma.ui.postMessage({ type: "merge-done", changed });
+    } catch (e) {
+      figma.ui.postMessage({ type: "error", message: `Merge failed: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+
+  if (msg.type === "close") {
+    figma.closePlugin();
+  }
+};

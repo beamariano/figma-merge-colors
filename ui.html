@@ -1,17 +1,536 @@
-<h2>Shape Creator</h2>
-<p>Count: <input id="count" type="number" value="5"></p>
-<button id="create">Create</button>
-<button id="cancel">Cancel</button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Color Merger</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f11;
+    --surface: #18181c;
+    --border: #2a2a30;
+    --text: #e8e8ec;
+    --muted: #666672;
+    --accent: #7c6af7;
+    --accent-hover: #9183f9;
+    --success: #4ade80;
+    --danger: #f87171;
+    --chip-bg: #1e1e24;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+    height: 600px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 16px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .header-icon {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .header-icon svg { width: 16px; height: 16px; }
+  .header h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+  .header p { font-size: 11px; color: var(--muted); }
+
+  /* ── Threshold row ── */
+  .controls {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .controls label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .controls input[type=range] {
+    flex: 1;
+    accent-color: var(--accent);
+    height: 4px;
+  }
+  .threshold-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    width: 28px;
+    text-align: right;
+  }
+  .scan-btn {
+    padding: 6px 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+  .scan-btn:hover { background: var(--accent-hover); }
+  .scan-btn:disabled { opacity: 0.5; cursor: default; }
+
+  /* ── Main scroll area ── */
+  .main { flex: 1; overflow-y: auto; padding: 12px 20px; }
+  .main::-webkit-scrollbar { width: 4px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+  .main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── Empty / loading state ── */
+  .empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; gap: 8px; color: var(--muted);
+  }
+  .empty svg { opacity: 0.3; }
+  .empty p { font-size: 12px; }
+
+  /* ── Color Group Card ── */
+  .group-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .group-card.selected { border-color: var(--accent); }
+
+  .group-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .group-header:hover { background: rgba(255,255,255,0.02); }
+
+  .check {
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .group-card.selected .check {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .check-mark { display: none; }
+  .group-card.selected .check-mark { display: block; }
+
+  .swatches {
+    display: flex; gap: 3px; flex-wrap: wrap;
+  }
+  .swatch {
+    width: 22px; height: 22px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+  }
+
+  .group-info { flex: 1; min-width: 0; }
+  .group-title {
+    font-size: 12px; font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .group-title .hex-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; color: var(--muted);
+  }
+  .group-meta { font-size: 11px; color: var(--muted); }
+
+  .expand-arrow {
+    color: var(--muted); font-size: 10px;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .group-card.open .expand-arrow { transform: rotate(180deg); }
+
+  .group-detail {
+    display: none;
+    padding: 0 12px 10px;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+  }
+  .group-card.open .group-detail { display: block; }
+
+  .member-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 0;
+    font-size: 11px; color: var(--muted);
+  }
+  .member-row .swatch { width: 16px; height: 16px; border-radius: 3px; }
+  .member-hex { font-family: 'DM Mono', monospace; color: var(--text); }
+  .member-count { margin-left: auto; }
+
+  /* ── Footer ── */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 12px 20px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .color-input-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .color-input-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  .hex-input-wrap {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--chip-bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 5px 10px;
+    flex: 1;
+    transition: border-color 0.15s;
+  }
+  .hex-input-wrap:focus-within { border-color: var(--accent); }
+
+  .color-preview {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
+  }
+  .hex-input-wrap input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  input[type=color] {
+    width: 28px; height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--chip-bg);
+    cursor: pointer;
+    padding: 2px;
+  }
+
+  .merge-btn {
+    width: 100%;
+    padding: 9px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+    letter-spacing: -0.01em;
+  }
+  .merge-btn:hover { background: var(--accent-hover); }
+  .merge-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .status-bar {
+    font-size: 11px; color: var(--success); text-align: center;
+    min-height: 16px;
+  }
+  .status-bar.error { color: var(--danger); }
+
+  .select-all-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .select-all-row span { font-size: 11px; color: var(--muted); }
+  .link-btn {
+    background: none; border: none; color: var(--accent);
+    font-family: inherit; font-size: 11px; cursor: pointer; padding: 0;
+  }
+  .link-btn:hover { color: var(--accent-hover); }
+
+  .spinner {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-icon">
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="5" cy="5" r="3.5" fill="white" opacity="0.9"/>
+      <circle cx="11" cy="5" r="3.5" fill="white" opacity="0.6"/>
+      <circle cx="8" cy="11" r="3.5" fill="white" opacity="0.75"/>
+    </svg>
+  </div>
+  <div>
+    <h1>Color Merger</h1>
+    <p>Find &amp; consolidate similar colors across your document</p>
+  </div>
+</div>
+
+<!-- Threshold + Scan -->
+<div class="controls">
+  <label>Threshold</label>
+  <input type="range" id="threshold" min="1" max="80" value="20" />
+  <span class="threshold-val" id="thresholdVal">20</span>
+  <button class="scan-btn" id="scanBtn">Scan</button>
+</div>
+
+<!-- Groups list -->
+<div class="main" id="main">
+  <div class="empty" id="emptyState">
+    <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+      <circle cx="14" cy="14" r="9" stroke="#666" stroke-width="2"/>
+      <circle cx="26" cy="14" r="9" stroke="#666" stroke-width="2"/>
+      <circle cx="20" cy="26" r="9" stroke="#666" stroke-width="2"/>
+    </svg>
+    <p>Click <strong>Scan</strong> to discover colors in your document</p>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <div class="color-input-row">
+    <label>Merge to</label>
+    <div class="hex-input-wrap">
+      <div class="color-preview" id="colorPreview"></div>
+      <input type="text" id="hexInput" placeholder="#A0A0FF" maxlength="7" />
+    </div>
+    <input type="color" id="colorPicker" value="#a0a0ff" title="Pick color" />
+  </div>
+  <div class="status-bar" id="statusBar"></div>
+  <button class="merge-btn" id="mergeBtn" disabled>Select groups to merge</button>
+</div>
+
 <script>
+  const thresholdSlider = document.getElementById('threshold');
+  const thresholdVal = document.getElementById('thresholdVal');
+  const scanBtn = document.getElementById('scanBtn');
+  const mainEl = document.getElementById('main');
+  const emptyState = document.getElementById('emptyState');
+  const hexInput = document.getElementById('hexInput');
+  const colorPicker = document.getElementById('colorPicker');
+  const colorPreview = document.getElementById('colorPreview');
+  const mergeBtn = document.getElementById('mergeBtn');
+  const statusBar = document.getElementById('statusBar');
 
-document.getElementById('create').onclick = () => {
-  const textbox = document.getElementById('count');
-  const count = parseInt(textbox.value, 10);
-  parent.postMessage({ pluginMessage: { type: 'create-shapes', count } }, '*')
-}
+  let groups = [];
+  let selectedGroups = new Set();
+  let targetColor = '#a0a0ff';
 
-document.getElementById('cancel').onclick = () => {
-  parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*')
-}
+  // ── Threshold slider ──
+  thresholdSlider.addEventListener('input', () => {
+    thresholdVal.textContent = thresholdSlider.value;
+  });
 
+  // ── Color picker sync ──
+  function setColor(hex) {
+    if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) return;
+    targetColor = hex.toUpperCase();
+    hexInput.value = targetColor;
+    colorPicker.value = targetColor;
+    colorPreview.style.background = targetColor;
+  }
+
+  hexInput.addEventListener('input', () => {
+    let v = hexInput.value.trim();
+    if (!v.startsWith('#')) v = '#' + v;
+    if (/^#[0-9A-Fa-f]{6}$/.test(v)) setColor(v);
+  });
+
+  colorPicker.addEventListener('input', () => setColor(colorPicker.value));
+  setColor('#A0A0FF');
+
+  // ── Scan ──
+  scanBtn.addEventListener('click', () => {
+    scanBtn.disabled = true;
+    scanBtn.innerHTML = '<span class="spinner"></span>';
+    parent.postMessage({ pluginMessage: { type: 'scan', threshold: +thresholdSlider.value } }, '*');
+  });
+
+  // ── Render groups ──
+  function renderGroups() {
+    if (groups.length === 0) {
+      mainEl.innerHTML = '';
+      mainEl.appendChild(emptyState);
+      emptyState.style.display = 'flex';
+      emptyState.querySelector('p').textContent = 'No colors found in this document.';
+      return;
+    }
+
+    emptyState.style.display = 'none';
+    mainEl.innerHTML = '';
+
+    const selectRow = document.createElement('div');
+    selectRow.className = 'select-all-row';
+    selectRow.innerHTML = `<span>${groups.length} color group${groups.length !== 1 ? 's' : ''} found</span>
+      <button class="link-btn" id="selectAllBtn">Select all</button>`;
+    mainEl.appendChild(selectRow);
+
+    document.getElementById('selectAllBtn').addEventListener('click', () => {
+      if (selectedGroups.size === groups.length) {
+        selectedGroups.clear();
+      } else {
+        groups.forEach((_, i) => selectedGroups.add(i));
+      }
+      renderGroups();
+    });
+
+    groups.forEach((g, idx) => {
+      const card = document.createElement('div');
+      card.className = 'group-card' + (selectedGroups.has(idx) ? ' selected' : '');
+
+      const swatchHtml = g.members.map(m =>
+        `<div class="swatch" style="background:#${m.hex}" title="#${m.hex}"></div>`
+      ).join('');
+
+      const membersHtml = g.members.map(m =>
+        `<div class="member-row">
+          <div class="swatch" style="background:#${m.hex}"></div>
+          <span class="member-hex">#${m.hex}</span>
+          <span class="member-count">${m.count} use${m.count !== 1 ? 's' : ''}</span>
+        </div>`
+      ).join('');
+
+      const similarLabel = g.members.length > 1
+        ? `${g.members.length} similar shades`
+        : `1 color`;
+
+      card.innerHTML = `
+        <div class="group-header">
+          <div class="check">
+            <svg class="check-mark" width="10" height="8" viewBox="0 0 10 8" fill="none">
+              <path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="swatches">${swatchHtml}</div>
+          <div class="group-info">
+            <div class="group-title">
+              <span class="hex-label">#${g.representative}</span>
+            </div>
+            <div class="group-meta">${similarLabel} · ${g.totalCount} total uses</div>
+          </div>
+          <span class="expand-arrow">▼</span>
+        </div>
+        <div class="group-detail">${membersHtml}</div>
+      `;
+
+      // Toggle select on header click
+      card.querySelector('.group-header').addEventListener('click', (e) => {
+        if (e.target.closest('.expand-arrow')) {
+          card.classList.toggle('open');
+          return;
+        }
+        if (selectedGroups.has(idx)) selectedGroups.delete(idx);
+        else selectedGroups.add(idx);
+        card.classList.toggle('selected', selectedGroups.has(idx));
+        updateMergeBtn();
+      });
+
+      mainEl.appendChild(card);
+    });
+
+    updateMergeBtn();
+  }
+
+  function updateMergeBtn() {
+    const n = selectedGroups.size;
+    if (n === 0) {
+      mergeBtn.disabled = true;
+      mergeBtn.textContent = 'Select groups to merge';
+    } else {
+      mergeBtn.disabled = false;
+      const totalColors = [...selectedGroups].reduce((s, i) => s + groups[i].members.length, 0);
+      mergeBtn.textContent = `Merge ${totalColors} color${totalColors !== 1 ? 's' : ''} → ${targetColor}`;
+    }
+  }
+
+  // Update button label when color changes
+  hexInput.addEventListener('input', updateMergeBtn);
+  colorPicker.addEventListener('input', updateMergeBtn);
+
+  // ── Merge ──
+  mergeBtn.addEventListener('click', () => {
+    if (selectedGroups.size === 0) return;
+    mergeBtn.disabled = true;
+    mergeBtn.innerHTML = '<span class="spinner" style="vertical-align:middle"></span> Merging…';
+    statusBar.textContent = '';
+
+    parent.postMessage({
+      pluginMessage: {
+        type: 'merge',
+        groupIndices: [...selectedGroups],
+        targetHex: targetColor.replace('#', ''),
+        threshold: +thresholdSlider.value
+      }
+    }, '*');
+  });
+
+  // ── Messages from plugin ──
+  window.onmessage = (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    if (msg.type === 'scan-result') {
+      groups = msg.groups;
+      selectedGroups.clear();
+      scanBtn.disabled = false;
+      scanBtn.textContent = 'Scan';
+      renderGroups();
+      statusBar.textContent = '';
+      statusBar.classList.remove('error');
+    }
+
+    if (msg.type === 'merge-done') {
+      statusBar.classList.remove('error');
+      statusBar.textContent = `✓ Updated ${msg.changed} layer${msg.changed !== 1 ? 's' : ''}`;
+      selectedGroups.clear();
+      // Re-scan automatically
+      setTimeout(() => {
+        parent.postMessage({ pluginMessage: { type: 'scan', threshold: +thresholdSlider.value } }, '*');
+        scanBtn.disabled = true;
+        scanBtn.innerHTML = '<span class="spinner"></span>';
+      }, 600);
+    }
+
+    if (msg.type === 'error') {
+      statusBar.classList.add('error');
+      statusBar.textContent = `✗ ${msg.message}`;
+      scanBtn.disabled = false;
+      scanBtn.textContent = 'Scan';
+      mergeBtn.disabled = selectedGroups.size === 0;
+      updateMergeBtn();
+    }
+  };
 </script>
+</body>
+</html>
